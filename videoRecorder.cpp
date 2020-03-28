@@ -1,19 +1,35 @@
 #include "videoRecorder.h"
 
+videoRecorder::videoRecorder():frameW_(-1),frameH_(-1),fps_(-1),
+                                fCamOpen_(false),fClose_(false),
+                                fRecord_(false),fShow_(false),{
+
+}
 videoRecorder::videoRecorder(std::string videoPath,int camNum,
                              double fps, std::string fourCC, int w,int h):
                                 frameW_(w),frameH_(h),fps_(fps),
-                                fClose_(0),fRecord_(0),fShow_(0),
-                                fFrameAddText_(0),textTimeout_(1){
-    savePath_= videoRecorder::checkPath(videoPath);
+                                fCamOpen_(false),fClose_(false),
+                                fRecord_(false),fShow_(false),{
+    videoRecorder::setup(videoPath,camNum,fps,fourCC,w,h);
+}
+
+videoRecorder::~videoRecorder(){
+    videoRecorder::closeCam();
+}
+
+void videoRecorder::setup(std::string videoPath, int camNum, double fps, std::string fourCC, int w, int h){
+    path_= videoRecorder::processPath(videoPath);
+    videoRecorder::processDirectory(path_);
+    fps_= fps;
 
     cam_= cv::VideoCapture(camNum);
     if (!cam_.isOpened()){
-        printf("Camera not opened. Quit Now\n");
-        exit(1);
+        fCamOpen_= false;
+        printf("Camera not opened.\n");
+        return;
     }
-    frameW_= (frameW_==-1)? int(cam_.get(3)):frameW_;
-    frameH_= (frameH_==-1)? int(cam_.get(4)):frameH_;
+    frameW_= (w==-1)? int(cam_.get(3)):w;
+    frameH_= (h==-1)? int(cam_.get(4)):h;
     cam_.read(camFrame_);
 
     if (int(fps_)==-1){
@@ -30,88 +46,107 @@ videoRecorder::videoRecorder(std::string videoPath,int camNum,
         printf("Detected fps: %.2f\n",fps_);
     }
 
-    recorder_= cv::VideoWriter(savePath_,CV_FOURCC(fourCC.at(0),fourCC.at(1),
+    recorder_= cv::VideoWriter(path_,CV_FOURCC(fourCC.at(0),fourCC.at(1),
                                                    fourCC.at(2),fourCC.at(3)),
                                fps_,cv::Size(frameW_,frameH_));
 
     camThread_= boost::thread(&videoRecorder::cameraLoop,this);
 }
 
-videoRecorder::~videoRecorder(){
-    videoRecorder::closeCam();
-}
-
 void videoRecorder::cameraLoop(){
+    fClose_=false;
     while(!fClose_){
-        cam_.read(camFrame_);
+        if (fCamOpen_)
+            cam_.read(camFrame_);
 
-        if (camFrame_.empty()){
-            printf("Cannot Receive Camera Frame\n");
+        if (camFrame_.empty())
             continue;
-        }
-        if (fFrameAddText_)
-            videoRecorder::addText2Frame();
 
+        videoRecorder::addText2Frame();
+
+        std::unique_lock<std::mutex> lockRecord(mtxCycle_);
         if (fRecord_)
             recorder_.write(camFrame_);
         if (fShow_){
             cv::imshow("Camera",camFrame_);
             inputKey_= char(cv::waitKey(1));
         }
+        lockRecord.unlock();
         boost::this_thread::interruption_point();
     }
 }
 
 void videoRecorder::addText2Frame(){
-    if (fFrameAddText_){
-//        cv::putText(img, text, coordinate, font, scale, bgr);
-        cv::putText(camFrame_,textProp_.text,
-                    cv::Point(int(frameW_*textProp_.x),int(frameH_*textProp_.y)),
-                    textProp_.font,textProp_.scale,textProp_.bgr,textProp_.lw);
-    }
 
-    double dt= std::chrono::duration_cast<std::chrono::duration<double> >
-            (std::chrono::high_resolution_clock::now()-text_t0_).count();
-    if (dt>textTimeout_){
-        fFrameAddText_=0;
-        return;
+    for (unsigned int i=0;i<textPropBuf_.size();i++){
+        textPropStruct textProp= textPropBuf_.at(i);
+//        cv::putText(img, text, coordinate, font, scale, bgr);
+        cv::putText(camFrame_,textProp.text,
+                    cv::Point(int(frameW_*textProp.x),int(frameH_*textProp.y)),
+                    textProp.font,textProp.scale,textProp.bgr,textProp.lw);
+
+        double dt= std::chrono::duration_cast<std::chrono::duration<double> >
+                (std::chrono::high_resolution_clock::now()-textProp.t0).count();
+        if (dt>textProp.timeout){
+            textPropBuf_.erase(textPropBuf_.begin()+i);
+            i--;
+        }
     }
     return;
 }
 
-void videoRecorder::addText(std::string text, double x,double y, int lw,
+void videoRecorder::addText(std::string text, double x,double y, double timeout, int lw,
                             cv::Scalar bgr, double scale, int font){
-    fFrameAddText_=1;
     x= (x>1)? x/frameW_:x;
     y= (y>1)? y/frameH_:y;
     lw= (lw<0)? 1:lw;
     scale= (scale<0)? 1:scale;
-    textProp_= {text, x, y, lw, bgr, scale, font};
-    text_t0_= std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point t0= std::chrono::high_resolution_clock::now();
+    textPropStruct textProp= {text, x, y, lw, bgr, scale, font,t0,timeout};
+    int i=videoRecorder::searchTextPropIndFromXY(x,y);
+    if (i==-1)
+        textPropBuf_.push_back(textProp);
+    else
+        textPropBuf_.at(unsigned(i))=textProp;
     return;
 }
 
-void videoRecorder::setTextTimeout(double textTimeout){
-    textTimeout_= textTimeout;
-    return;
-}
-
-
-void videoRecorder::record(bool frecord){
-    if (fRecord_!=frecord){
-        fRecord_= frecord;
-        if (fRecord_) printf("Record Cam Now\n");
-        else printf("Stop Record\n");
+int videoRecorder::searchTextPropIndFromXY(double x, double y){
+    for (unsigned int i=0;i<textPropBuf_.size();i++){
+        if (fabs(x-textPropBuf_.at(i).x)<1e-3 && fabs(y-textPropBuf_.at(i).y)<1e-3)
+            return int(i);
     }
+    return -1;
+}
+
+void videoRecorder::clearText(){
+    textPropBuf_.clear();
+    return;
+}
+
+
+void videoRecorder::startRecord(){
+    if (fRecord_==true)
+        return;
+    std::unique_lock<std::mutex> lockRecord(mtxCycle_);
+    fRecord_= true;
+//    if (fRecord_) printf("Recording Cam\n");
+    return;
+}
+void videoRecorder::stopRecord(){
+    if (fRecord_==false)
+        return;
+    std::unique_lock<std::mutex> lockRecord(mtxCycle_);
+    fRecord_= false;
     return;
 }
 
 void videoRecorder::show(bool fshow){
-    if (fShow_!=fshow){
-        fShow_= fshow;
-        if (fShow_) printf("Show Cam Now\n");
-        else printf("Stop show cam\n");
-    }
+    if (fShow_==fshow)
+        return;
+    std::unique_lock<std::mutex> lockRecord(mtxCycle_);
+    fShow_= fshow;
+//    if (fShow_) printf("Showing Cam\n");
     return;
 }
 
@@ -119,25 +154,44 @@ cv::Mat videoRecorder::getCamFrame(){
     return camFrame_;
 }
 
-std::string videoRecorder::checkPath(std::string path){
-    if (path.at(0)=='~'){
-        path.erase(0,1);
-        path= std::string("/home/")+getenv("LOGNAME")+path;
-    }
+std::string videoRecorder::processPath(std::string path){
+    if (path.at(0)=='~')
+        path= getenv("HOME")+path.substr(1);
+    if (path.find("..")==0){
+//        std::string pwd= getenv("PWD");
+        char tuh[PATH_MAX];
+        std::string pwd=getcwd(tuh,sizeof(tuh));
+        do{
+            pwd= pwd.substr(0,pwd.rfind("/"));
+            path= path.substr(path.find("..")+2);
+        }while(path.find("..")<2);
+        path= pwd+path;
 
-    std::string dir= path.substr(0,path.find_last_of('/'));
-    struct stat st;
-    if (stat(dir.c_str(),&st)!=0){
-        mkdir(dir.c_str(),S_IRWXU);
-    }
+    }else if(path.at(0)=='.')
+        path= getenv("PWD")+path.substr(1);
+    if (path.find("/")==path.npos)
+        path= getenv("PWD")+std::string("/")+path;
     return path;
 }
+void videoRecorder::processDirectory(std::string dir){
+    dir= dir.substr(0,dir.rfind('/'));
+    struct stat st;
+    if (stat(dir.c_str(),&st)!=0){
+        videoRecorder::processDirectory(dir);
+        mkdir(dir.c_str(),S_IRWXU);
+    }
+    return;
+}
+
 
 void videoRecorder::closeCam(){
+    if (!fCamOpen_)
+        return;
     fClose_=1;
     usleep(1e5);
     camThread_.interrupt();
     camThread_.join();
     cam_.release();
     recorder_.release();
+    return;
 }

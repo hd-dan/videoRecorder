@@ -13,10 +13,13 @@ void recordVideo(){
     while(!js.getState().button.at(7)){
         js_state state= js.getState();
 
+        if (state.button.at(5))
+            recorder.addText("haha",0.7,0.5,2,cv::Scalar(100,100,50));
+
         if (state.button.at(0))
-            frecord=1;
+            recorder.startRecord();
         else if (state.button.at(1))
-            frecord=0;
+            recorder.stopRecord();
 
         if (state.button.at(2))
             fshow=1;
@@ -24,10 +27,6 @@ void recordVideo(){
             fshow=0;
 
 
-        if (state.button.at(5))
-            recorder.addText("haha",0.7,0.5,2,cv::Scalar(100,100,50));
-
-        recorder.record(frecord);
         recorder.show(fshow);
         usleep(1e5);
     }
