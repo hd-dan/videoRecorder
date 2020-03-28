@@ -1,15 +1,13 @@
 #include "videoRecorder.h"
 
 videoRecorder::videoRecorder():frameW_(-1),frameH_(-1),fps_(-1),
-                                fCamOpen_(false),fClose_(false),
-                                fRecord_(false),fShow_(false),{
+                                fClose_(false),fRecord_(false),fShow_(false){
 
 }
 videoRecorder::videoRecorder(std::string videoPath,int camNum,
                              double fps, std::string fourCC, int w,int h):
                                 frameW_(w),frameH_(h),fps_(fps),
-                                fCamOpen_(false),fClose_(false),
-                                fRecord_(false),fShow_(false),{
+                                fClose_(false), fRecord_(false),fShow_(false){
     videoRecorder::setup(videoPath,camNum,fps,fourCC,w,h);
 }
 
@@ -21,10 +19,10 @@ void videoRecorder::setup(std::string videoPath, int camNum, double fps, std::st
     path_= videoRecorder::processPath(videoPath);
     videoRecorder::processDirectory(path_);
     fps_= fps;
+    fourCC_= fourCC;
 
     cam_= cv::VideoCapture(camNum);
     if (!cam_.isOpened()){
-        fCamOpen_= false;
         printf("Camera not opened.\n");
         return;
     }
@@ -56,7 +54,7 @@ void videoRecorder::setup(std::string videoPath, int camNum, double fps, std::st
 void videoRecorder::cameraLoop(){
     fClose_=false;
     while(!fClose_){
-        if (fCamOpen_)
+        if (cam_.isOpened())
             cam_.read(camFrame_);
 
         if (camFrame_.empty())
@@ -65,7 +63,7 @@ void videoRecorder::cameraLoop(){
         videoRecorder::addText2Frame();
 
         std::unique_lock<std::mutex> lockRecord(mtxCycle_);
-        if (fRecord_)
+        if (fRecord_ && recorder_.isOpened())
             recorder_.write(camFrame_);
         if (fShow_){
             cv::imshow("Camera",camFrame_);
@@ -125,20 +123,31 @@ void videoRecorder::clearText(){
 }
 
 
-void videoRecorder::startRecord(){
-    if (fRecord_==true)
-        return;
+bool videoRecorder::startRecord(){
     std::unique_lock<std::mutex> lockRecord(mtxCycle_);
+    if (!recorder_.isOpened()){
+        recorder_= cv::VideoWriter(path_,CV_FOURCC(fourCC_.at(0),fourCC_.at(1),
+                                                       fourCC_.at(2),fourCC_.at(3)),
+                                   fps_,cv::Size(frameW_,frameH_));
+    }
+    if (fRecord_==true)
+        return false;
     fRecord_= true;
-//    if (fRecord_) printf("Recording Cam\n");
-    return;
+    return true;
 }
-void videoRecorder::stopRecord(){
+bool videoRecorder::pauseRecord(){
     if (fRecord_==false)
-        return;
+        return false;
     std::unique_lock<std::mutex> lockRecord(mtxCycle_);
     fRecord_= false;
-    return;
+    return true;
+}
+bool videoRecorder::stopRecord(){
+    std::unique_lock<std::mutex> lockRecord(mtxCycle_);
+    fRecord_= false;
+    if (recorder_.isOpened())
+        recorder_.release();
+    return !recorder_.isOpened();
 }
 
 void videoRecorder::show(bool fshow){
@@ -146,7 +155,6 @@ void videoRecorder::show(bool fshow){
         return;
     std::unique_lock<std::mutex> lockRecord(mtxCycle_);
     fShow_= fshow;
-//    if (fShow_) printf("Showing Cam\n");
     return;
 }
 
@@ -157,9 +165,9 @@ cv::Mat videoRecorder::getCamFrame(){
 std::string videoRecorder::processPath(std::string path){
     if (path.at(0)=='~')
         path= getenv("HOME")+path.substr(1);
+    char tuh[PATH_MAX];
     if (path.find("..")==0){
 //        std::string pwd= getenv("PWD");
-        char tuh[PATH_MAX];
         std::string pwd=getcwd(tuh,sizeof(tuh));
         do{
             pwd= pwd.substr(0,pwd.rfind("/"));
@@ -168,9 +176,9 @@ std::string videoRecorder::processPath(std::string path){
         path= pwd+path;
 
     }else if(path.at(0)=='.')
-        path= getenv("PWD")+path.substr(1);
+        path= getcwd(tuh,sizeof(tuh))+path.substr(1);
     if (path.find("/")==path.npos)
-        path= getenv("PWD")+std::string("/")+path;
+        path= getcwd(tuh,sizeof(tuh))+std::string("/")+path;
     return path;
 }
 void videoRecorder::processDirectory(std::string dir){
@@ -183,10 +191,13 @@ void videoRecorder::processDirectory(std::string dir){
     return;
 }
 
+bool videoRecorder::mvVideoTo(std::string mvPath){
+    if (recorder_.isOpened())
+        return false;
+    return !rename(path_.c_str(),videoRecorder::processPath(mvPath).c_str());
+}
 
 void videoRecorder::closeCam(){
-    if (!fCamOpen_)
-        return;
     fClose_=1;
     usleep(1e5);
     camThread_.interrupt();

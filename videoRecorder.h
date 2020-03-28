@@ -23,6 +23,7 @@ private:
     int frameW_;
     int frameH_;
     double fps_;
+    std::string fourCC_;
 
     std::mutex mtxCycle_;
     boost::thread camThread_;
@@ -63,12 +64,15 @@ public:
                  int font= cv::FONT_HERSHEY_PLAIN);
     void clearText();
 
-    void startRecord();
-    void stopRecord();
+    bool startRecord();
+    bool pauseRecord();
+    bool stopRecord();
     void show(bool fshow=1);
     cv::Mat getCamFrame();
 
     void closeCam();
+
+    bool mvVideoTo(std::string mvPath);
 
 };
 
