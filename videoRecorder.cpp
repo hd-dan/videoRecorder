@@ -147,6 +147,8 @@ bool videoRecorder::stopRecord(){
     fRecord_= false;
     if (recorder_.isOpened())
         recorder_.release();
+    else
+        return false;
     return !recorder_.isOpened();
 }
 

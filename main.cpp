@@ -4,7 +4,7 @@
 #include "../util/joystick.h"
 
 void recordVideo(){
-    int camNum=0;
+    int camNum=1;
     std::string path= "/home/airportvision/Desktop/testVideo.avi";
     videoRecorder recorder(path,camNum);
     joystick js(0);
@@ -14,19 +14,18 @@ void recordVideo(){
     bool f1st=1;
     bool fshow=1;
     double t=0;
-    while(!js.getState().button.at(7) && t<10){
+    while(!js.getState().button.at(7) && t<3){
         js_state state= js.getState();
 
-        if (t>2)
+        if (t>1)
             recorder.addText("haha",0.1,0.9,0.5);
 
 
-        if (t>7 && f1st){
-            recorder.stopRecord();
+        if (t>2 && recorder.stopRecord()){
             printf("stopped\n");
             if (recorder.mvVideoTo("~/Desktop/success.avi") )
                 printf("\n\n\nRenamed\n\n\n");
-            recorder.startRecord();
+//            recorder.startRecord();
             f1st=0;
         }
 
