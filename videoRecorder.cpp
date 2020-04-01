@@ -15,7 +15,8 @@ videoRecorder::~videoRecorder(){
     videoRecorder::closeCam();
 }
 
-void videoRecorder::setup(std::string videoPath, int camNum, double fps, std::string fourCC, int w, int h){
+void videoRecorder::setup(std::string videoPath, int camNum, double fps,
+                          std::string fourCC, int w, int h){
     path_= videoRecorder::processPath(videoPath);
     videoRecorder::processDirectory(path_);
     fps_= fps;
@@ -39,7 +40,8 @@ void videoRecorder::setup(std::string videoPath, int camNum, double fps, std::st
             cam_.read(camFrame_);
         }
         t1=std::chrono::high_resolution_clock::now();
-        double t=std::chrono::duration_cast<std::chrono::duration<double> >(t1-t0).count();
+        double t=std::chrono::duration_cast<std::chrono::duration<double> >
+                    (t1-t0).count();
         fps_= n/t;
         printf("Detected fps: %.2f\n",fps_);
     }
@@ -82,6 +84,10 @@ void videoRecorder::addText2Frame(){
         cv::putText(camFrame_,textProp.text,
                     cv::Point(int(frameW_*textProp.x),int(frameH_*textProp.y)),
                     textProp.font,textProp.scale,textProp.bgr,textProp.lw);
+//        CvFont font= cv::fontQt("Arial",textProp.scale,textProp.bgr);
+//        cv::addText(camFrame_,textProp.text,
+//                    cv::Point(int(frameW_*textProp.x),int(frameH_*textProp.y)),
+//                    font);
 
         double dt= std::chrono::duration_cast<std::chrono::duration<double> >
                 (std::chrono::high_resolution_clock::now()-textProp.t0).count();
@@ -93,13 +99,16 @@ void videoRecorder::addText2Frame(){
     return;
 }
 
-void videoRecorder::addText(std::string text, double x,double y, double timeout, int lw,
-                            cv::Scalar bgr, double scale, int font){
+//void videoRecorder::addText(std::string text, double x,double y, double timeout, int lw,
+//                            cv::Scalar bgr, double scale, int font){
+void videoRecorder::addText(std::string text, double x, double y, double timeout,
+                            double scale, int lw, cv::Scalar bgr, int font){
     x= (x>1)? x/frameW_:x;
     y= (y>1)? y/frameH_:y;
     lw= (lw<0)? 1:lw;
     scale= (scale<0)? 1:scale;
-    std::chrono::high_resolution_clock::time_point t0= std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point t0=
+            std::chrono::high_resolution_clock::now();
     textPropStruct textProp= {text, x, y, lw, bgr, scale, font,t0,timeout};
     int i=videoRecorder::searchTextPropIndFromXY(x,y);
     if (i==-1)

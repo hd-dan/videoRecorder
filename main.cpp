@@ -17,8 +17,9 @@ void recordVideo(){
     while(!js.getState().button.at(7) && t<3){
         js_state state= js.getState();
 
+        recorder.addText("hehe",0.2,0.9,0.5, 1,cv::Scalar(0,0,0),0.7);
         if (t>1)
-            recorder.addText("haha",0.1,0.9,0.5);
+            recorder.addText("haha",0.1,0.9,0.5,3,cv::Scalar(0,0,0),0.7);
 
 
         if (t>2 && recorder.stopRecord()){
@@ -57,11 +58,7 @@ int main(){
 
     recordVideo();
 
-
-//    if (!rename(path.c_str(),"/home/airportvision/Desktop/success.avi") )
-//        printf("\n\n\nRenamed\n\n\n");
-//    else
-//        printf("\n\n\nfailed to rename\n\n\n");
+//    std::cout<<cv::getBuildInformation();
 
     return 0;
 }

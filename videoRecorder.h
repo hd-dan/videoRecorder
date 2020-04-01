@@ -59,9 +59,9 @@ public:
     void setup(std::string videoPath,int camNum,
                double fps=-1, std::string fourCC="MJPG", int w=-1, int h=-1);
 
-    void addText(std::string text, double x,double y, double timeout=5,int lw=1,
-                 cv::Scalar bgr=cv::Scalar(0,0,0),double scale=1,
-                 int font= cv::FONT_HERSHEY_PLAIN);
+    void addText(std::string text, double x,double y, double timeout=5,
+                 double scale=0.7,int lw=1, cv::Scalar bgr=cv::Scalar(0,0,0),
+                 int font= cv::FONT_HERSHEY_DUPLEX);
     void clearText();
 
     bool startRecord();
