@@ -17,9 +17,9 @@ void recordVideo(){
     while(!js.getState().button.at(7) && t<3){
         js_state state= js.getState();
 
-        recorder.addText("hehe",0.2,0.9,0.5, 1,cv::Scalar(0,0,0),0.7);
+        recorder.addText("hehe",0.2,0.9,0.5, 0.7,1,cv::Scalar(0,0,0));
         if (t>1)
-            recorder.addText("haha",0.1,0.9,0.5,3,cv::Scalar(0,0,0),0.7);
+            recorder.addText("haha",0.1,0.9,0.5, 0.7,3,cv::Scalar(0,0,0));
 
 
         if (t>2 && recorder.stopRecord()){
