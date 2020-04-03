@@ -68,7 +68,7 @@ void videoRecorder::cameraLoop(){
         if (fRecord_ && recorder_.isOpened())
             recorder_.write(camFrame_);
         if (fShow_){
-            cv::imshow("Camera",camFrame_);
+            cv::imshow(path_.substr(path_.rfind("/")+1),camFrame_);
             inputKey_= char(cv::waitKey(1));
         }
         lockRecord.unlock();
